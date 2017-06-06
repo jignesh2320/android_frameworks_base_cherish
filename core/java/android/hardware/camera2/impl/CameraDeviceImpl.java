@@ -25,6 +25,7 @@ import android.content.Context;
 import android.app.ActivityThread;
 import android.graphics.ImageFormat;
 import android.hardware.ICameraService;
+import android.app.ActivityThread;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
@@ -57,6 +58,7 @@ import android.os.RemoteException;
 import android.os.ServiceSpecificException;
 import android.os.SystemClock;
 import android.os.SystemProperties;
+import android.text.TextUtils;
 import android.util.Log;
 import android.util.Range;
 import android.util.Size;
@@ -155,7 +157,7 @@ public class CameraDeviceImpl extends CameraDevice
     private int mNextSessionId = 0;
 
     private final int mAppTargetSdkVersion;
-    private final boolean mIsPrivilegedApp;
+    private boolean mIsPrivilegedApp = false;
 
     private ExecutorService mOfflineSwitchService;
     private CameraOfflineSessionImpl mOfflineSessionImpl;
@@ -1514,8 +1516,9 @@ public class CameraDeviceImpl extends CameraDevice
         String packageList = SystemProperties.get("persist.vendor.camera.privapp.list");
 
         if (packageList.length() > 0) {
-            String[] packages = packageList.split(",");
-            for (String str : packages) {
+            TextUtils.StringSplitter splitter = new TextUtils.SimpleStringSplitter(',');
+            splitter.setString(packageList);
+            for (String str : splitter) {
                 if (packageName.equals(str)) {
                     return true;
                 }
@@ -1575,6 +1578,15 @@ public class CameraDeviceImpl extends CameraDevice
                         inputConfig.getWidth() + "x" + inputConfig.getHeight() + " is not valid");
             }
         } else {
+            /*
+             * don't check input format and size,
+             * if the package name is in the white list
+             */
+            if (isPrivilegedApp()) {
+                Log.w(TAG, "ignore input format/size check for white listed app");
+                return;
+            }
+
             if (!checkInputConfigurationWithStreamConfigurations(inputConfig, /*maxRes*/false) &&
                     !checkInputConfigurationWithStreamConfigurations(inputConfig, /*maxRes*/true)) {
                 throw new IllegalArgumentException("Input config with format " +
