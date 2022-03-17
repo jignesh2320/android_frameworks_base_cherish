@@ -424,6 +424,9 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
     // PowerManager.BRIGHTNESS_INVALID_FLOAT when there's no temporary adjustment set.
     private float mTemporaryAutoBrightnessAdjustment;
 
+    // Whether auto brightness is applied one shot when screen is turned on
+    private boolean mAutoBrightnessOneShot;
+
     // Animators.
     private ObjectAnimator mColorFadeOnAnimator;
     private ObjectAnimator mColorFadeOffAnimator;
@@ -560,6 +563,53 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
         mDisplayWhiteBalanceController = displayWhiteBalanceController;
 
         loadNitsRange(resources);
+
+        if (mDisplayId == Display.DEFAULT_DISPLAY) {
+            mCdsi = LocalServices.getService(ColorDisplayServiceInternal.class);
+            boolean active = mCdsi.setReduceBrightColorsListener(new ReduceBrightColorsListener() {
+                @Override
+                public void onReduceBrightColorsActivationChanged(boolean activated,
+                        boolean userInitiated) {
+                    applyReduceBrightColorsSplineAdjustment();
+
+                }
+
+                @Override
+                public void onReduceBrightColorsStrengthChanged(int strength) {
+                    applyReduceBrightColorsSplineAdjustment();
+                }
+            });
+            if (active) {
+                applyReduceBrightColorsSplineAdjustment();
+            }
+        } else {
+            mCdsi = null;
+        }
+    }
+
+    private void applyReduceBrightColorsSplineAdjustment() {
+        mHandler.obtainMessage(MSG_UPDATE_RBC).sendToTarget();
+        sendUpdatePowerState();
+    }
+
+    private void handleRbcChanged() {
+        if (mBrightnessMapper == null) {
+            Log.w(TAG, "No brightness mapping available to recalculate splines");
+            return;
+        }
+
+        float[] adjustedNits = new float[mNitsRange.length];
+        for (int i = 0; i < mNitsRange.length; i++) {
+            adjustedNits[i] = mCdsi.getReduceBrightColorsAdjustedBrightnessNits(mNitsRange[i]);
+        }
+        mBrightnessMapper.recalculateSplines(mCdsi.isReduceBrightColorsActivated(), adjustedNits);
+
+
+        // If rbc is turned on, off or there is a change in strength, we want to reset the short
+        // term model. Since the nits range at which brightness now operates has changed due to
+        // RBC/strength change, any short term model based on the previous range should be
+        // invalidated.
+        mAutomaticBrightnessController.resetShortTermModel();
     }
 
     /**
@@ -940,6 +990,12 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
             Slog.w(TAG, "Screen brightness nits configuration is unavailable; falling back");
             mNitsRange = BrightnessMappingStrategy.getFloatArray(resources
                     .obtainTypedArray(com.android.internal.R.array.config_screenBrightnessNits));
+        }
+    }
+
+    private void reloadReduceBrightColours() {
+        if (mCdsi != null && mCdsi.isReduceBrightColorsActivated()) {
+            applyReduceBrightColorsSplineAdjustment();
         }
     }
 
@@ -2091,8 +2147,8 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
     }
 
     // We want to return true if the user has set the screen brightness.
-    // If they have just turned RBC on (and therefore added that interaction to the curve),
-    // or changed the brightness another way, then we should return true.
+    // RBC on, off, and intensity changes will return false.
+    // Slider interactions whilst in RBC will return true, just as when in non-rbc.
     private boolean updateUserSetScreenBrightness() {
         if ((Float.isNaN(mPendingScreenBrightnessSetting)
                 || mPendingScreenBrightnessSetting < 0.0f)) {
@@ -2442,6 +2498,10 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
                         return;
                     }
                     handleSettingsChange(false /*userSwitch*/);
+                    break;
+
+                case MSG_UPDATE_RBC:
+                    handleRbcChanged();
                     break;
             }
         }
