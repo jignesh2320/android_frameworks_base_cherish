@@ -18,10 +18,8 @@ package com.android.systemui.qs;
 
 import android.os.Bundle;
 
-import com.android.internal.colorextraction.ColorExtractor;
 import com.android.systemui.R;
 import com.android.systemui.battery.BatteryMeterViewController;
-import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.demomode.DemoMode;
 import com.android.systemui.demomode.DemoModeController;
 import com.android.systemui.flags.FeatureFlags;
@@ -73,7 +71,6 @@ class QuickStatusBarHeaderController extends ViewController<QuickStatusBarHeader
             DemoModeController demoModeController,
             QuickQSPanelController quickQSPanelController,
             QSCarrierGroupController.Builder qsCarrierGroupControllerBuilder,
-            SysuiColorExtractor colorExtractor,
             QSExpansionPathInterpolator qsExpansionPathInterpolator,
             BatteryMeterViewController batteryMeterViewController,
             FeatureFlags featureFlags,
@@ -104,6 +101,9 @@ class QuickStatusBarHeaderController extends ViewController<QuickStatusBarHeader
         mIconManager = new StatusBarIconController.TintedIconManager(mIconContainer, featureFlags);
         mDemoModeReceiver = new ClockDemoModeReceiver(mClockView);
         mColorExtractor = colorExtractor;
+
+        // Don't need to worry about tuner settings for this icon
+        mBatteryMeterViewController.ignoreTunerUpdates();
     }
 
     @Override
