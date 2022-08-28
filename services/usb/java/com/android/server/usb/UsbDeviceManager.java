@@ -1474,6 +1474,27 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
             mSendStringCount = 0;
             mStartAccessory = false;
         }
+
+        public void setTrustRestrictUsb() {
+            final int restrictUsb = LineageSettings.Global.getInt(mContentResolver,
+                    LineageSettings.Global.TRUST_RESTRICT_USB, 0);
+            // Effective immediately, ejects any connected USB devices.
+            // If the restriction is set to "only when locked", only execute once USB is
+            // disconnected and keyguard is showing, to avoid ejecting connected devices
+            // on lock
+            final boolean usbConnected = mConnected || mHostConnected;
+            final boolean shouldRestrict = (restrictUsb == 1 && mIsKeyguardShowing && !usbConnected)
+                    || restrictUsb == 2;
+            try {
+                if (mUsb != null) {
+                    mUsb.enableUsbDataSignal(!shouldRestrict);
+                } else if (mUsbRestrictor != null) {
+                    mUsbRestrictor.setEnabled(shouldRestrict);
+                }
+            } catch (RemoteException ignored) {
+                // This feature is not supported
+            }
+        }
     }
 
     private static final class UsbHandlerLegacy extends UsbHandler {
