@@ -183,6 +183,7 @@ class MediaCarouselController @Inject constructor(
      * It will be called when the container is out of view.
      */
     lateinit var updateUserVisibility: () -> Unit
+    lateinit var updateHostVisibility: () -> Unit
 
     private val settingsObserver = SettingsObserver(bgHandler, systemSettings)
     private var artworkSettings = ArtworkSettings()
